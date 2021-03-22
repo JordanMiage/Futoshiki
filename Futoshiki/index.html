@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+    <title> Futoshiki </title>
+    
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">   
+    <link href="style/style.css" rel="stylesheet">
+    <script type="application/javascript" src="lib/jquery-3.4.1.min.js"></script>
+    <script type="application/javascript" src="lib/minisat.js"></script>
+    <script type="application/javascript" src="futoshiki.js"></script>
+
+    <script type="application/javascript">
+        const $$=jQuery;
+        const BLANK='&nbsp;';
+        const CELL_VALUES = [BLANK,'1','2','3','4'];
+        const OPERATOR_VALUES = [BLANK,'&lt;','&gt;'];
+
+        const X = {ocupper: true};
+
+        $$(function() 
+        {
+            function initialize() 
+            {
+                function set_constraint_if_not_blank($element,value) 
+                {
+                    $element[value==BLANK?'removeClass':'addClass']('constraint');
+                }
+
+                const $template_cells=$$('#grid-template > div');
+                $template_cells.appendTo('#puzzle');
+                $template_cells.clone().appendTo('#solution');
+                const $puzzle_cells = $$('#puzzle .cell');
+
+                $puzzle_cells.mousedown(function(event) 
+                {
+                    const $target = $$(event.target);
+                    const index = CELL_VALUES.indexOf($target.html());
+                    const new_value=CELL_VALUES[(index+1)%5];
+                    $target.html(new_value);
+                    set_constraint_if_not_blank($target,new_value);
+                    reset_steps_and_solution();
+                });
+
+                const $puzzle_operators = $$('#puzzle div.operator');
+                $puzzle_operators.mousedown(function(event) 
+                {
+                    let $target = $$(this);
+                    const index = OPERATOR_VALUES.indexOf($target.children('span').html());
+                    const new_value = OPERATOR_VALUES[(index+1)%3];
+                    $target.html('<span>'+new_value+'</span>');
+                    set_constraint_if_not_blank($target,new_value);
+                    reset_steps_and_solution();
+                });
+
+                reset_puzzle();
+            }
+
+            function reset_grid(id) 
+            {
+                const $grid=$$(id);
+                const $cells = $grid.find('.cell');
+                $cells.html(CELL_VALUES[0]);
+                const $operators = $grid.find('.operator');
+                $operators.html('<span>'+OPERATOR_VALUES[0]+'</span>');
+                $grid.children().removeClass('constraint');
+            }
+            function reset_puzzle() 
+            {
+                reset_grid('#puzzle');
+                reset_steps_and_solution();
+            }
+            function reset_steps_and_solution() 
+            {
+                $$('.step .code').empty();
+                reset_grid('#solution');
+                $$('#solution-container > .message').hide();
+            }
+
+            function get_rpl_from_grid()
+             {
+                let rpl = '';
+                const $puzzle_cells = $$('#puzzle div.cell');
+                $$.each($puzzle_cells,function(index,div) 
+                {
+                    const $div = $$(div);
+                    const value = $div.html();
+                    if (value != BLANK) 
+                    {
+                        const square = div.id;
+                        rpl = rpl + square + value + '\n';
+                    }
+                });
+
+                const $puzzle_operators = $$('#puzzle div.operator');
+                $$.each($puzzle_operators,function(index,div) 
+                {
+                    const $span = $$(div).children('span');
+                    const value_as_html = $span.html();
+                    if (value_as_html != BLANK) 
+                    {
+                        const value_as_text = $span.text();
+                        const squares = div.id.split('');
+                        rpl = rpl + squares.join(value_as_text) + '\n';
+                    }
+                });
+                return rpl;
+            }
+
+            function set_step(name,content) 
+            {
+                $$(`#${name} .code`).text(content);
+            }
+
+            function update_solution_grid(solution) 
+            {
+                const $solution = $$('#solution');
+                $solution.find('.cell').map(function(i,cell) 
+                {
+                    $$(cell).text(solution[i]);
+                });
+                $$('#puzzle .operator').map(function(i,operator) 
+                {
+                    $solution.find('#' + operator.id).html($$(operator).html());
+                });
+            }
+
+            initialize();
+
+            const $all_mode_buttons = $$('.switch-mode.button');
+
+            $all_mode_buttons.click(function() 
+            {
+                const id = this.id;
+                const modes = id.slice(5);
+                const $body = $$('body');
+                $body.removeClass();
+                for (const mode of modes.split('-')) 
+                {
+                    $body.addClass(mode);
+                }
+
+                $all_mode_buttons.removeClass('active');
+                const $this = $$(this);
+                $this.addClass('active');
+            });
+
+            $$('#run.button').click(function() 
+            {
+                const rpl=get_rpl_from_grid();
+                const result = run(rpl);
+
+                set_step('rpl',result.rpl);
+                set_step('fnc',result.fnc);
+                set_step('puzzle-as-dimacs',result.puzzle_as_dimacs);
+                set_step('solution-as-dimacs',result.solution_as_dimacs.replace(/ /g,'\n'));
+
+                if(result.solution_as_array.length) 
+                {
+                    update_solution_grid(result.solution_as_array.flat());
+                }
+            });
+
+            $$('#reset.button').click(function() 
+            {
+                reset_puzzle(); 
+            });
+
+            X.ocupper = false;
+        });
+    </script>
+</head>
+
+<body class="m">
+<div class="banner">
+    <div class="titles">
+        <span class="title">Projet Futoshiki</span>
+        <!--
+        <span class="mode_selectors">
+            <div id="mode_modern" class="switch-mode button active">2020</div>
+            
+            <span>|</span>
+            <div id="mode_nineties-calculator" class="switch-mode button">1990</div>
+            <span>|</span>
+            <div id="mode_seventies-calculator" class="switch-mode button">1970</div>
+            -->
+        </span>
+    </div>
+<!--
+    <div class="links">
+        <a href="https://github.com/knife-maniac/INF402.git">code source sur github</a>
+        <a href="mochawesome-report/mochawesome.html">résultats des tests</a>
+        <a href="coverage/index.html">rapport de couverture</a>
+    </div>
+-->
+</div>
+
+<div id="game">
+    <div id="puzzle-container" class="container">
+        <div class="title">PUZZLE</div>
+        <div id="puzzle" class="grid"></div>
+    </div>
+
+    <div class="space">
+        <div id="run" class="button material-icons">play_arrow</div>
+        <div id="reset" class="button material-icons">delete</div>
+    </div>
+
+    <div id="solution-container" class="container">
+        <div class="title">SOLUTION</div>
+        <div class="screen-frame">
+            <div class="screen">
+                <div id="solution" class="grid"></div>
+			</div>
+        </div>
+    </div>
+
+    <div class="vertical space"><span class="material-icons path" style="transform:rotate(90deg)">arrow_forward</span></div>
+    <div class="big space"></div>
+    <div class="vertical space"><span class="material-icons path" style="transform:rotate(-90deg)">arrow_forward</span></div>
+
+    <div id="rpl" class="step">
+        <div class="title">Modelisation du puzzle</div>
+        <div class="code"></div>
+    </div>
+
+    <div class="horizontal space material-icons path">arrow_forward</div>
+    
+    <div id="fnc" class="step">
+        <div class="title">Forme Normale Conjonctive</div>
+        <div class="code"></div>
+    </div>
+
+    <div class="horizontal space material-icons path">arrow_forward</div>
+    
+    <div id="puzzle-as-dimacs" class="step">
+        <div class="title">Format Dimacs</div>
+        <div class="code"></div>
+    </div>
+
+    <div class="horizontal space material-icons path">arrow_forward</div>
+    
+    <div id="solution-as-dimacs" class="step">
+        <div class="title">Solution Format Dimacs</div>
+        <div class="code"></div>
+    </div>
+</div>
+
+
+<div id="grid-template" style="display:none">
+    <div id="A" class="cell">0</div>
+    <div id="AB" class="horizontal operator">0</div>
+    <div id="B" class="cell">0</div>
+    <div id="BC" class="horizontal operator">0</div>
+    <div id="C" class="cell">0</div>
+    <div id="CD" class="horizontal operator">0</div>
+    <div id="D" class="cell">0</div>
+    <div id="AE" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="BF" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="CG" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="DH" class="vertical operator"><span>0</span></div>
+    <div id="E" class="cell">0</div>
+    <div id="EF" class="horizontal operator">0</div>
+    <div id="F" class="cell">0</div>
+    <div id="FG" class="horizontal operator">0</div>
+    <div id="G" class="cell">0</div>
+    <div id="GH" class="horizontal operator">0</div>
+    <div id="H" class="cell">0</div>
+    <div id="EI" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="FJ" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="GK" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="HL" class="vertical operator"><span>0</span></div>
+    <div id="I" class="cell">0</div>
+    <div id="IJ" class="horizontal operator">0</div>
+    <div id="J" class="cell">0</div>
+    <div id="JK" class="horizontal operator">0</div>
+    <div id="K" class="cell">0</div>
+    <div id="KL" class="horizontal operator">0</div>
+    <div id="L" class="cell">0</div>
+    <div id="IM" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="JN" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="KO" class="vertical operator"><span>0</span></div>
+    <div class="spacer"></div>
+    <div id="LP" class="vertical operator"><span>0</span></div>
+    <div id="M" class="cell">0</div>
+    <div id="MN" class="horizontal operator">0</div>
+    <div id="N" class="cell">0</div>
+    <div id="NO" class="horizontal operator">0</div>
+    <div id="O" class="cell">0</div>
+    <div id="OP" class="horizontal operator">0</div>
+    <div id="P" class="cell">0</div>
+</div>
+</body>
+</html>
